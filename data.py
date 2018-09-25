@@ -1,5 +1,6 @@
 import torch
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 from PIL import Image
@@ -21,7 +22,19 @@ def save_model(model, keyname):
     torch.save(model, str(model_dir / filename))
 
 
-def get_image(filename):
-    path = data_root_dir / 'train' / filename
+def get_train_image(_id):
+    path = data_root_dir / 'train' / 'images' / f'{_id}.png'
+    im = Image.open(str(path))
+    return im
+
+
+def get_train_mask(_id):
+    path = data_root_dir / 'train' / 'masks' / f'{_id}.png'
+    im = Image.open(str(path))
+    return im
+
+
+def get_test_image(_id):
+    path = data_root_dir / 'test' / 'images' / f'{_id}.png'
     im = Image.open(str(path))
     return im

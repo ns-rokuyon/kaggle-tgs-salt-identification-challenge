@@ -1,6 +1,5 @@
 import numpy as np
 
-
 # ref: https://www.kaggle.com/paulorzp/run-length-encode-and-decode
 def rle_encode(img):
     '''
@@ -22,7 +21,7 @@ def RLenc(img, order='F', format=True):
 
     returns run length as an array or string (if format is True)
     """
-    bytes = img.reshape(img.shape[0] * img.shape[1], order=order)
+    bytes = img.reshape(img.shape[0] * img.shape[1] * img.shape[2], order=order)
     runs = []  ## list of run lengths
     r = 0  ## the current run length
     pos = 1  ## count starts from 1 per WK

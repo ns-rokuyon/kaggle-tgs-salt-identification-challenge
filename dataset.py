@@ -1,40 +1,50 @@
 from torch.utils.data import Dataset
 from torchvision import transforms
 from PIL import Image
-from data import get_image
+
+import joint_transform as jt
+from data import *
 
 
-class ClassificationDataset(Dataset):
-    def __init__(self, df):
+class SegmentationDataset(Dataset):
+    def __init__(self, df, mode='train'):
         self.df = df
+        self.mode = mode
         self.transformer = None
+        assert self.mode in ('train', 'test')
 
     def set_transformer(self, size=None):
         if size:
-            self.transformer = transforms.Compose([
-                transforms.Resize(size),
-                transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor()
+            self.transformer = jt.Compose([
+                jt.Grayscale(),
+                jt.FreeScale(size),
+                jt.RandomHorizontallyFlip(),
+                jt.RandomRotateRightAngle(),
+                jt.ToTensor()
             ])
         else:
-            self.transformer = transforms.Compose([
-                transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor()
+            self.transformer = jt.Compose([
+                jt.Grayscale(),
+                jt.FreeScale(size),
+                jt.RandomHorizontallyFlip(),
+                jt.RandomRotateRightAngle(),
+                jt.ToTensor()
             ])
+        return self
 
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, i):
-        filename = self.df.loc[i, 'ImageId']
-        encoded_pixels = self.df.loc[i, 'EncodedPixels']
+        _id = self.df.iloc[i]['id']
 
-        # NaN type is float
-        label = 0 if type(encoded_pixels) == float else 1
+        if self.mode == 'test':
+            im = get_test_image(_id)
+            return im
 
-        im = get_image(filename)
-        im = self.transformer(im)
+        im = get_train_image(_id)
+        mask = get_train_mask(_id)
 
-        return im, label
+        im, mask = self.transformer(im, mask)
+
+        return im, mask
