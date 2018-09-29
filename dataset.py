@@ -11,25 +11,41 @@ class SegmentationDataset(Dataset):
         self.df = df
         self.mode = mode
         self.transformer = None
-        assert self.mode in ('train', 'test')
+        assert self.mode in ('train', 'val', 'test')
 
     def set_transformer(self, size=None):
-        if size:
-            self.transformer = jt.Compose([
-                jt.Grayscale(),
-                jt.FreeScale(size),
-                jt.RandomHorizontallyFlip(),
-                jt.RandomRotateRightAngle(),
-                jt.ToTensor()
-            ])
-        else:
-            self.transformer = jt.Compose([
-                jt.Grayscale(),
-                jt.FreeScale(size),
-                jt.RandomHorizontallyFlip(),
-                jt.RandomRotateRightAngle(),
-                jt.ToTensor()
-            ])
+        if self.mode == 'test':
+            return self
+
+        if self.mode == 'val':
+            if size:
+                self.transformer = jt.Compose([
+                    jt.Grayscale(),
+                    jt.FreeScale(size),
+                    jt.ToTensor()
+                ])
+            else:
+                self.transformer = jt.Compose([
+                    jt.Grayscale(),
+                    jt.ToTensor()
+                ])
+
+        if self.mode == 'train':
+            if size:
+                self.transformer = jt.Compose([
+                    jt.Grayscale(),
+                    jt.FreeScale(size),
+                    jt.RandomHorizontallyFlip(),
+                    jt.RandomRotateRightAngle(),
+                    jt.ToTensor()
+                ])
+            else:
+                self.transformer = jt.Compose([
+                    jt.Grayscale(),
+                    jt.RandomHorizontallyFlip(),
+                    jt.RandomRotateRightAngle(),
+                    jt.ToTensor()
+                ])
         return self
 
     def __len__(self):

@@ -1,4 +1,40 @@
+import torch
 import numpy as np
+from torchvision import transforms
+from PIL import Image
+
+
+def show_prediction(im, pred, target=None):
+    to_pil = transforms.ToPILImage()
+
+    assert im.ndimension() in (3, 4)
+    assert pred.ndimension() == 4
+
+    batch_size, _, size, _ = pred.shape
+
+    if im.ndimension() == 3:
+        im = im.reshape(1, *im.shape)
+    assert im.shape[0] == batch_size
+
+
+    if target is not None:
+        if target is not None and target.ndimension() == 3:
+            target = target.reshape(1, *target.shape)
+        assert target.shape[0] == batch_size
+
+        comb_img = None
+        for _im, _pred, _target in zip(im, pred, target):
+            row_img = np.concatenate([_im.numpy(), _pred.numpy(), _target.numpy()], axis=2)
+            if comb_img is None:
+                comb_img = row_img
+            else:
+                comb_img = np.concatenate([comb_img, row_img], axis=1)
+        return to_pil(torch.Tensor(comb_img))
+
+    # TODO
+    comb_img = np.hstack([im.numpy(), pred.numpy()])
+    return to_pil(comb_img)
+
 
 # ref: https://www.kaggle.com/paulorzp/run-length-encode-and-decode
 def rle_encode(img):
