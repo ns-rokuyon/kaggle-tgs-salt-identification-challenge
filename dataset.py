@@ -6,11 +6,25 @@ import joint_transform as jt
 from data import *
 
 
+def mask_to_label(mask, n_pixels):
+    ratio = mask.numpy().sum() / n_pixels
+    if 0 < ratio < 0.05:
+        label = 1
+    elif 0.05 <= ratio:
+        label = 2
+    else:
+        label = 0
+    return label
+
+
 class SegmentationDataset(Dataset):
-    def __init__(self, df, size=(128, 128), use_depth_channels=False):
+    def __init__(self, df, size=(128, 128),
+                 use_depth_channels=False,
+                 with_aux_label=False):
         self.df = df
         self.size = size
         self.use_depth_channels = use_depth_channels
+        self.with_aux_label = with_aux_label
         self.transformer = jt.Compose([
             jt.Grayscale(),
             jt.FreeScale(self.size),
@@ -32,6 +46,10 @@ class SegmentationDataset(Dataset):
         if self.use_depth_channels:
             im = add_depth_channels(im)
 
+        if self.with_aux_label:
+            label = mask_to_label(mask, self.size[0] * self.size[1])
+            return im, mask, label
+
         return im, mask
 
 
@@ -40,10 +58,15 @@ class SegmentationInferenceDataset(Dataset):
     Input tensor: resize to specified size
     GT tensor: no resize
     """
-    def __init__(self, df, input_size=(128, 128), use_depth_channels=False, with_gt=True, with_raw_input=False):
+    def __init__(self, df, input_size=(128, 128),
+                 use_depth_channels=False,
+                 with_aux_label=False,
+                 with_gt=True,
+                 with_raw_input=False):
         self.df = df
         self.input_size = input_size
         self.use_depth_channels = use_depth_channels
+        self.with_aux_label = with_aux_label
         self.with_gt = with_gt
         self.with_raw_input = with_raw_input
         self.input_transformer = transforms.Compose([
@@ -86,5 +109,12 @@ class SegmentationInferenceDataset(Dataset):
             im = add_depth_channels(im)
 
         if self.with_raw_input:
+            if self.with_aux_label:
+                label = mask_to_label(mask, self.input_size[0] * self.input_size[1])
+                return self.raw_input_transformer(_im), im, mask, label
             return self.raw_input_transformer(_im), im, mask
+
+        if self.with_aux_label:
+            label = mask_to_label(mask, self.input_size[0] * self.input_size[1])
+            return im, mask, label
         return im, mask

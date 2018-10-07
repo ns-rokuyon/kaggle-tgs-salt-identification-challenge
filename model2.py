@@ -1,9 +1,17 @@
 import torch
 import numpy as np
+import torch.utils.model_zoo as model_zoo
 from torch import nn
 from torch.nn import functional as F
 from torch.autograd import Variable
 from torchvision.models.resnet import BasicBlock, ResNet
+
+
+model_urls = {
+    'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
+    'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth'
+}
+
 
 class ConvBn2d(nn.Module):
     def __init__(self, in_ch, out_ch, kernel_size=3, padding=1):
@@ -29,12 +37,8 @@ class Decoder(nn.Module):
         self.bn = nn.BatchNorm2d(out_ch)
 
     def forward(self, dec, enc):
-        print(dec.shape)
-        print(enc.shape)
         dec = self.up(dec)
         enc = self.enc_conv(enc)
-        print(dec.shape)
-        print(enc.shape)
         concat = torch.cat([dec, enc], dim=1)
         concat = self.conv(concat)
         return F.relu(self.bn(concat))
@@ -43,11 +47,15 @@ class Decoder(nn.Module):
 class UNetRes34(nn.Module):
     """ https://www.kaggle.com/c/tgs-salt-identification-challenge/discussion/65933
     """
-    def __init__(self, n_classes=1):
+    def __init__(self, n_classes=1, pretrained_resnet=True):
         super().__init__()
         self.n_classes = n_classes
 
         self.resnet = ResNet(BasicBlock, [3, 4, 6, 3], num_classes=n_classes)
+        del self.resnet.fc
+        if pretrained_resnet:
+            self.resnet.load_state_dict(model_zoo.load_url(model_urls['resnet34']), strict=False)
+            print('Loaded pretrained resnet weights')
 
         self.encoder1 = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False),
@@ -67,6 +75,7 @@ class UNetRes34(nn.Module):
             nn.ReLU(inplace=True),
             ConvBn2d(512, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2)   # Add
         )
 
         self.decoder5 = Decoder(256, 512, 512, 64)
@@ -75,16 +84,18 @@ class UNetRes34(nn.Module):
         self.decoder2 = Decoder(64, 64, 64, 64)
         self.decoder1 = Decoder(64, 64, 32, 64)
 
-        self.conv = nn.Conv2d(64,  1, kernel_size=1, padding=0)
+        self.conv = nn.Conv2d(64, 1, kernel_size=1, padding=0)
 
     def forward(self, x):
-        e1 = self.encoder1(x)
-        e2 = self.encoder2(e1)
-        e3 = self.encoder3(e2)
-        e4 = self.encoder4(e3)
-        e5 = self.encoder5(e4)
+        batch_size, C, H, W = x.shape
 
-        f = self.center(e5)
+        e1 = self.encoder1(x)   # shape(B, 64, 128, 128)
+        e2 = self.encoder2(e1)  # shape(B, 64, 64, 64)
+        e3 = self.encoder3(e2)  # shape(B, 128, 32, 32)
+        e4 = self.encoder4(e3)  # shape(B, 256, 16, 16)
+        e5 = self.encoder5(e4)  # shape(B, 512, 8, 8)
+
+        f = self.center(e5)     # shape(B, 256, 4, 4)
 
         d5 = self.decoder5(f, e5)
         d4 = self.decoder4(d5, e4)
@@ -95,90 +106,90 @@ class UNetRes34(nn.Module):
         return self.conv(d1)
 
 
-class UNetRes34HcAux:
+class UNetRes34HcAux(nn.Module):
     """ https://www.kaggle.com/c/tgs-salt-identification-challenge/discussion/65933
     """
-    def __init__(self ):
+    def __init__(self, n_classes=1, pretrained_resnet=True):
         super().__init__()
-        self.resnet = ResNet(BasicBlock, [3, 4, 6, 3], num_classes=1 )
+        self.n_classes = n_classes
+
+        self.resnet = ResNet(BasicBlock, [3, 4, 6, 3], num_classes=n_classes)
+        del self.resnet.fc
+        if pretrained_resnet:
+            self.resnet.load_state_dict(model_zoo.load_url(model_urls['resnet34']), strict=False)
+            print('Loaded pretrained resnet weights')
 
         self.encoder1 = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False),
-            BatchNorm2d(64),
+            nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
         )
         self.encoder2 = nn.Sequential(
             nn.MaxPool2d(kernel_size=2, stride=2),
             self.resnet.layer1,
-        )
-        self.encoder3 = self.resnet.layer2
-        self.encoder4 = self.resnet.layer3
-        self.encoder5 = self.resnet.layer4
+        )   # out: 64
+        self.encoder3 = self.resnet.layer2  # out: 128
+        self.encoder4 = self.resnet.layer3  # out: 256
+        self.encoder5 = self.resnet.layer4  # out: 512
 
         self.center = nn.Sequential(
-            ConvBn2d( 512, 512, kernel_size=3, padding=1),
+            ConvBn2d(512, 512, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            ConvBn2d( 512, 256, kernel_size=3, padding=1),
+            ConvBn2d(512, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2)   # Add
         )
 
         self.decoder5 = Decoder(256, 512, 512, 64)
-        self.decoder4 = Decoder( 64, 256, 256, 64)
-        self.decoder3 = Decoder( 64, 128, 128, 64)
-        self.decoder2 = Decoder( 64,  64,  64, 64)
-        self.decoder1 = Decoder( 64,  64,  32, 64)
+        self.decoder4 = Decoder(64, 256, 256, 64)
+        self.decoder3 = Decoder(64, 128, 128, 64)
+        self.decoder2 = Decoder(64, 64, 64, 64)
+        self.decoder1 = Decoder(64, 64, 32, 64)
 
         self.logit_pixel  = nn.Sequential(
             nn.Conv2d(320, 64, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64,  1, kernel_size=1, padding=0),
+            nn.Conv2d(64, 1, kernel_size=1, padding=0),
         )
 
-        self.logit_image = nn.Sequential(
+        self.logit_feat = nn.Sequential(
             nn.Linear(512, 128),
             nn.ReLU(inplace=True),
-            nn.Linear(128, 1),
-        )
+            nn.Linear(128, 3),
+        )   # 3 classes
 
     def forward(self, x):
-        batch_size,C,H,W = x.shape
+        batch_size, C, H, W = x.shape
 
-        mean=[0.485, 0.456, 0.406]
-        std =[0.229, 0.224, 0.225]
-        x = torch.cat([
-            (x-mean[2])/std[2],
-            (x-mean[1])/std[1],
-            (x-mean[0])/std[0],
-        ],1)
+        e1 = self.encoder1(x)   # shape(B, 64, 128, 128)
+        e2 = self.encoder2(e1)  # shape(B, 64, 64, 64)
+        e3 = self.encoder3(e2)  # shape(B, 128, 32, 32)
+        e4 = self.encoder4(e3)  # shape(B, 256, 16, 16)
+        e5 = self.encoder5(e4)  # shape(B, 512, 8, 8)
 
+        f = self.center(e5)     # shape(B, 256, 4, 4)
 
-        e1 = self.encoder1(x )  #; print('e1',e1.size())
-        e2 = self.encoder2(e1)  #; print('e2',e2.size())
-        e3 = self.encoder3(e2)  #; print('e3',e3.size())
-        e4 = self.encoder4(e3)  #; print('e4',e4.size())
-        e5 = self.encoder5(e4)  #; print('e5',e5.size())
+        d5 = self.decoder5(f, e5)
+        d4 = self.decoder4(d5, e4)
+        d3 = self.decoder3(d4, e3)
+        d2 = self.decoder2(d3, e2)
+        d1 = self.decoder1(d2, e1)
 
-        f = self.center(e5)                #; print('f',f.size())
-
-        d5 = self.decoder5( f,e5)          #; print('d5',f.size())
-        d4 = self.decoder4(d5,e4)          #; print('d4',f.size())
-        d3 = self.decoder3(d4,e3)          #; print('d3',f.size())
-        d2 = self.decoder2(d3,e2)          #; print('d2',f.size())
-        d1 = self.decoder1(d2,e1)          #; print('d1',f.size())
-
-        f = torch.cat((
+        hc = torch.cat((
             d1,
-            F.upsample(d2,scale_factor= 2, mode='bilinear',align_corners=False),
-            F.upsample(d3,scale_factor= 4, mode='bilinear',align_corners=False),
-            F.upsample(d4,scale_factor= 8, mode='bilinear',align_corners=False),
-            F.upsample(d5,scale_factor=16, mode='bilinear',align_corners=False),
-        ),1)
-        f = F.dropout(f, p=0.50, training=self.training)
-        logit_pixel = self.logit_pixel(f)
+            F.upsample(d2, scale_factor=2, mode='bilinear', align_corners=False),
+            F.upsample(d3, scale_factor=4, mode='bilinear', align_corners=False),
+            F.upsample(d4, scale_factor=8, mode='bilinear', align_corners=False),
+            F.upsample(d5, scale_factor=16, mode='bilinear', align_corners=False),
+        ), 1)
+        hc = F.dropout(hc, p=0.5, training=self.training)
+        logit_pixel = self.logit_pixel(hc)
 
+        f = F.adaptive_avg_pool2d(e5, output_size=1).view(batch_size, -1)
+        f = F.dropout(f, p=0.5, training=self.training)
+        logit_feat = self.logit_feat(f)
 
-        f = F.adaptive_avg_pool2d(e5, output_size=1).view(batch_size,-1)
-        f = F.dropout(f, p=0.50, training=self.training)
-        logit_image = self.logit_image(f).view(-1)
+        if not self.training:
+            return logit_pixel
 
-        return logit_pixel, logit_image
+        return logit_pixel, logit_feat
