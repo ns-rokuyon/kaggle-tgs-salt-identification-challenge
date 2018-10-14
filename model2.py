@@ -365,12 +365,14 @@ class UNetRes34HcAuxSCSEv2(nn.Module):
         self.dec_se2 = SCSEModule(64)
         self.dec_se1 = SCSEModule(64)
 
+        self.bn_hc = nn.BatchNorm2d(320)
         self.fuse_pixel  = nn.Sequential(
             nn.Conv2d(320, 64, kernel_size=3, padding=1),
             nn.ReLU(inplace=True)
         )
         self.logit_pixel_conv = nn.Conv2d(64, 1, kernel_size=1, padding=0)
 
+        self.bn_gap = nn.BatchNorm1d(512)
         self.fuse_feat = nn.Sequential(
             nn.Linear(512, 64),
             nn.ReLU(inplace=True)
@@ -408,12 +410,12 @@ class UNetRes34HcAuxSCSEv2(nn.Module):
             F.upsample(d4, scale_factor=8, mode='bilinear', align_corners=False),
             F.upsample(d5, scale_factor=16, mode='bilinear', align_corners=False),
         ), 1)
-        hc = F.dropout(hc, p=0.5, training=self.training)
+        hc = self.bn_hc(hc)
         fuse_pixel = self.fuse_pixel(hc)
         logit_pixel = self.logit_pixel_conv(fuse_pixel)
 
         f = F.adaptive_avg_pool2d(e5, output_size=1).view(batch_size, -1)
-        f = F.dropout(f, p=0.5, training=self.training)
+        f = self.bn_gap(f)
         fuse_feat = self.fuse_feat(f)
         logit_feat = self.logit_feat_fc(fuse_feat)
 
@@ -427,3 +429,4 @@ class UNetRes34HcAuxSCSEv2(nn.Module):
             return logit
 
         return logit, logit_pixel, logit_feat
+

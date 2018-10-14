@@ -107,7 +107,8 @@ def lovasz_hinge_flat(logits, labels):
     perm = perm.data
     gt_sorted = labels[perm]
     grad = lovasz_grad(gt_sorted)
-    loss = torch.dot(F.relu(errors_sorted), Variable(grad))
+    #loss = torch.dot(F.relu(errors_sorted), Variable(grad))
+    loss = torch.dot(F.elu(errors_sorted) + 1, Variable(grad))
     return loss
 
 
@@ -230,3 +231,22 @@ def mean(l, ignore_nan=False, empty=0):
     if n == 1:
         return acc
     return acc / n
+
+
+#def criterion_phase2(logit, logit_hc, logit_aux, target_pixel, target_label):
+    #segmentation_loss = lovasz_hinge(logit.squeeze(), target_pixel.squeeze())
+    #classification_loss = F.cross_entropy(logit_aux, target_label)
+    #
+    #non_zero_index = torch.sum(target_pixel, (1, 2, 3)).nonzero().view(-1)
+    #non_zero_logit_hc = logit_hc[non_zero_index]
+    #non_zero_target_pixel = target_pixel[non_zero_index]
+    #
+    #print('segmentation_loss={}'.format(segmentation_loss))
+    #print('classification_loss={}'.format(classification_loss))
+    #if len(non_zero_index) > 0:
+        #segmentation_hc_loss = lovasz_hinge(non_zero_logit_hc.squeeze(),
+                                            #non_zero_target_pixel.squeeze())
+        #print('segmentation_hc_loss={}'.format(segmentation_hc_loss))
+        #return segmentation_loss + 0.1 * segmentation_hc_loss + 0.01 * classification_loss
+    #
+    #return segmentation_loss + 0.05 * classification_loss

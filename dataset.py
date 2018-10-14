@@ -1,3 +1,5 @@
+import numpy as np
+import albumentations as alb
 from torch.utils.data import Dataset
 from torchvision import transforms
 from PIL import Image
@@ -20,17 +22,32 @@ def mask_to_label(mask, n_pixels):
 class SegmentationDataset(Dataset):
     def __init__(self, df, size=(128, 128),
                  use_depth_channels=False,
-                 with_aux_label=False):
+                 with_aux_label=False,
+                 as_aux_label='cov',
+                 use_augmentation=False):
         self.df = df
         self.size = size
         self.use_depth_channels = use_depth_channels
         self.with_aux_label = with_aux_label
+        self.as_aux_label = as_aux_label    # cov: mask_to_label, coverage_class: get_mask_type() value
+        self.use_augmentation = use_augmentation
         self.transformer = jt.Compose([
             jt.Grayscale(),
             jt.FreeScale(self.size),
             jt.RandomHorizontallyFlip(),
             jt.ToTensor()
         ])
+        if self.use_augmentation:
+            print('Use augmentations')
+            self.aug = alb.Compose([
+                #alb.RandomSizedCrop(min_max_height=(80, 101), height=101, width=101, p=0.5),
+                #alb.ElasticTransform(p=0.5, alpha=120, sigma=120 * 0.05, alpha_affine=120 * 0.03),
+                #alb.GridDistortion(p=0.5),
+                #alb.Blur(),
+                #alb.GaussNoise(),
+                alb.RandomBrightness(),
+                alb.RandomGamma()
+            ])
 
     def __len__(self):
         return len(self.df)
@@ -41,13 +58,25 @@ class SegmentationDataset(Dataset):
         im = get_train_image(_id)
         mask = get_train_mask(_id)
 
+        if self.use_augmentation:
+            augmented = self.aug(image=np.array(im),
+                                 mask=np.array(mask))
+            im = Image.fromarray(augmented['image'])
+            mask = Image.fromarray(augmented['mask'])
+
         im, mask = self.transformer(im, mask)
 
         if self.use_depth_channels:
             im = add_depth_channels(im)
 
         if self.with_aux_label:
-            label = mask_to_label(mask, self.size[0] * self.size[1])
+            if self.as_aux_label == 'cov':
+                label = mask_to_label(mask, self.size[0] * self.size[1])
+            elif self.as_aux_label == 'coverage_class':
+                label = self.df.iloc[i]['coverage_class']
+            else:
+                raise ValueError(self.as_aux_label)
+
             return im, mask, label
 
         return im, mask

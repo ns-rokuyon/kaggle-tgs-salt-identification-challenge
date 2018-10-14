@@ -3,6 +3,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+
+def dice_loss(input, target):
+    input = torch.sigmoid(input)
+    smooth = 1.
+
+    iflat = input.view(-1)
+    tflat = target.view(-1)
+    intersection = (iflat * tflat).sum()
+    
+    return 1 - ((2. * intersection + smooth) /
+              (iflat.sum() + tflat.sum() + smooth))
+
+
 class FocalLoss(nn.Module):
     def __init__(self, gamma=0, alpha=None, size_average=True):
         super().__init__()
