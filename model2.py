@@ -61,6 +61,22 @@ class Decoder(nn.Module):
         return F.relu(self.bn(concat))
 
 
+class LastDecoder(nn.Module):
+    def __init__(self, in_ch, concat_ch, out_ch=64):
+        super().__init__()
+        self.up = nn.ConvTranspose2d(in_ch, concat_ch,
+                                     kernel_size=2, stride=2)
+        self.conv = nn.Conv2d(concat_ch, out_ch,
+                              kernel_size=3, stride=1, padding=1)
+        self.bn = nn.BatchNorm2d(out_ch)
+
+    def forward(self, dec):
+        dec = self.up(dec)
+        dec = self.conv(dec)
+        return F.relu(self.bn(dec))
+
+
+
 class UNetRes34(nn.Module):
     """ https://www.kaggle.com/c/tgs-salt-identification-challenge/discussion/65933
     """
@@ -316,9 +332,10 @@ class UNetRes34HcAuxSCSE(nn.Module):
 class UNetRes34HcAuxSCSEv2(nn.Module):
     """
     """
-    def __init__(self, n_classes=1, pretrained_resnet=True):
+    def __init__(self, n_classes=1, n_aux_classes=1, pretrained_resnet=True):
         super().__init__()
         self.n_classes = n_classes
+        self.n_aux_classes = n_aux_classes
 
         self.resnet = ResNet(BasicBlock, [3, 4, 6, 3], num_classes=n_classes)
         del self.resnet.fc
@@ -377,7 +394,7 @@ class UNetRes34HcAuxSCSEv2(nn.Module):
             nn.Linear(512, 64),
             nn.ReLU(inplace=True)
         )
-        self.logit_feat_fc = nn.Linear(64, 3)
+        self.logit_feat_fc = nn.Linear(64, self.n_aux_classes)
 
         self.logit = nn.Sequential(
             nn.Conv2d(128, 64, kernel_size=3, padding=1),

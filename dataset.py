@@ -40,8 +40,8 @@ class SegmentationDataset(Dataset):
         if self.use_augmentation:
             print('Use augmentations')
             self.aug = alb.Compose([
-                #alb.RandomSizedCrop(min_max_height=(80, 101), height=101, width=101, p=0.5),
-                #alb.ElasticTransform(p=0.5, alpha=120, sigma=120 * 0.05, alpha_affine=120 * 0.03),
+                #alb.RandomSizedCrop(min_max_height=(80, 101), height=101, width=101, p=0.2),
+                #alb.ElasticTransform(p=0.2, alpha=120, sigma=120 * 0.05, alpha_affine=120 * 0.03),
                 #alb.GridDistortion(p=0.5),
                 #alb.Blur(),
                 #alb.GaussNoise(),
