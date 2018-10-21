@@ -5,7 +5,12 @@ from torchvision import transforms
 from PIL import Image
 
 import joint_transform as jt
-from data import *
+
+try:
+    from data import *
+except ImportError:
+    print('import data_colab.py instead of data.py')
+    from data_colab import *
 
 
 def mask_to_label(mask, n_pixels):
@@ -19,18 +24,23 @@ def mask_to_label(mask, n_pixels):
     return label
 
 
+mean = np.array([0.4719732, 0.5, 0.23602746], dtype=np.float32).reshape(3, 1, 1)
+
+
 class SegmentationDataset(Dataset):
     def __init__(self, df, size=(128, 128),
                  use_depth_channels=False,
                  with_aux_label=False,
                  as_aux_label='cov',
-                 use_augmentation=False):
+                 use_augmentation=False,
+                 mean_sub=False):
         self.df = df
         self.size = size
         self.use_depth_channels = use_depth_channels
         self.with_aux_label = with_aux_label
         self.as_aux_label = as_aux_label    # cov: mask_to_label, coverage_class: get_mask_type() value
         self.use_augmentation = use_augmentation
+        self.mean_sub = mean_sub
         self.transformer = jt.Compose([
             jt.Grayscale(),
             jt.FreeScale(self.size),
@@ -40,13 +50,17 @@ class SegmentationDataset(Dataset):
         if self.use_augmentation:
             print('Use augmentations')
             self.aug = alb.Compose([
-                #alb.RandomSizedCrop(min_max_height=(80, 101), height=101, width=101, p=0.2),
-                #alb.ElasticTransform(p=0.2, alpha=120, sigma=120 * 0.05, alpha_affine=120 * 0.03),
-                #alb.GridDistortion(p=0.5),
-                #alb.Blur(),
-                #alb.GaussNoise(),
-                alb.RandomBrightness(),
-                alb.RandomGamma()
+                alb.OneOf([
+                    alb.RandomSizedCrop(min_max_height=(80, 101), height=101, width=101, p=0.2),
+                    alb.ElasticTransform(p=0.2, alpha=120, sigma=120 * 0.05, alpha_affine=120 * 0.03),
+                    alb.GridDistortion(p=0.5)
+                ]),
+                alb.OneOf([
+                    alb.Blur(),
+                    alb.GaussNoise(),
+                    alb.RandomBrightness(),
+                    alb.RandomGamma()
+                ])
             ])
 
     def __len__(self):
@@ -68,6 +82,9 @@ class SegmentationDataset(Dataset):
 
         if self.use_depth_channels:
             im = add_depth_channels(im)
+            
+        if self.mean_sub:
+            im = im - torch.Tensor(mean)
 
         if self.with_aux_label:
             if self.as_aux_label == 'cov':
@@ -91,13 +108,15 @@ class SegmentationInferenceDataset(Dataset):
                  use_depth_channels=False,
                  with_aux_label=False,
                  with_gt=True,
-                 with_raw_input=False):
+                 with_raw_input=False,
+                 mean_sub=False):
         self.df = df
         self.input_size = input_size
         self.use_depth_channels = use_depth_channels
         self.with_aux_label = with_aux_label
         self.with_gt = with_gt
         self.with_raw_input = with_raw_input
+        self.mean_sub = mean_sub
         self.input_transformer = transforms.Compose([
             transforms.Grayscale(),
             transforms.Resize(self.input_size),
@@ -136,6 +155,9 @@ class SegmentationInferenceDataset(Dataset):
 
         if self.use_depth_channels:
             im = add_depth_channels(im)
+
+        if self.mean_sub:
+            im = im - torch.Tensor(mean)
 
         if self.with_raw_input:
             if self.with_aux_label:
